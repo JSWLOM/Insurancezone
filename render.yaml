@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: api
+    env: python
+    region: singapore          # closest to India on Render free tier
+    buildCommand: pip install -r requirements-fixed.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    healthCheckPath: /health
+
+    envVars:
+      # ── Set these in the Render dashboard under "Environment" ──
+      - key: MONGODB_URL
+        sync: false            # Render will prompt you to fill this
+      - key: DB_NAME
+        value: insurancezone
+      - key: JWT_SECRET
+        generateValue: true    # Render auto-generates a secure secret
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 30
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: 7
+      - key: GOOGLE_SHEETS_URL
+        sync: false
+      - key: OFFICE_LAT
+        sync: false            # Set to your real office lat
+      - key: OFFICE_LNG
+        sync: false            # Set to your real office lng
+      - key: OFFICE_RADIUS_METERS
+        value: 20
+      - key: ALLOWED_ORIGINS
+        sync: false            # e.g. https://insurancezone.co.in
+      - key: APP_ENV
+        value: production
