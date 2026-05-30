@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     google_sheets_url: str = ""
 
     # Geo-fence
-    office_lat: float = 25.5747
-    office_lng: float = 83.5718
-    office_radius_meters: float = 200.0
+    office_lat: float = 25.5806
+    office_lng: float = 83.5564
+    office_radius_meters: float = 20.0
 
     # App
     allowed_origins: str = "http://localhost:3000"
