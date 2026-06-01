@@ -44,7 +44,7 @@ async def list_enquiries(
     city: str | None = Query(default=None),
     limit: int = Query(default=50, le=200),
     skip: int = Query(default=0),
-    current_user: dict = Depends(admin_or_manager),
+    current_user: dict = Depends(require_auth),
 ):
     query: dict = {}
     if status:
@@ -73,7 +73,7 @@ async def list_enquiries(
 
 
 @router.get("/stats/summary")
-async def enquiry_stats(current_user: dict = Depends(admin_or_manager)):
+async def enquiry_stats(current_user: dict = Depends(require_auth)):
     pipeline = [
         {"$group": {"_id": "$status", "count": {"$sum": 1}}},
     ]
@@ -93,7 +93,7 @@ async def enquiry_stats(current_user: dict = Depends(admin_or_manager)):
 @router.get("/{enquiry_id}")
 async def get_enquiry(
     enquiry_id: str,
-    current_user: dict = Depends(admin_or_manager),
+    current_user: dict = Depends(require_auth),
 ):
     doc = await enquiries_col().find_one({"_id": ObjectId(enquiry_id)})
     if not doc:

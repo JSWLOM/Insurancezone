@@ -201,3 +201,10 @@ python seed_admin.py
 | GET | `/api/leave/balance/me` | Any staff | Own leave balance |
 
 Full interactive docs: `/docs` (Swagger UI)
+
+
+
+
+izonejai@gmail.com     jai@9044
+izonesristi@gmail.com   Santosh@8858
+jaiswalom435@gmail.com    Izone@123
