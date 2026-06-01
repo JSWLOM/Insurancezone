@@ -198,3 +198,31 @@ def _format_user(u: dict) -> UserOut:
         is_active=u.get("is_active", True),
         created_at=u.get("created_at", datetime.utcnow()),
     )
+
+@router.delete("/users/{user_id}", status_code=200)
+async def delete_user(
+    user_id: str,
+    current_user: dict = Depends(admin_only),
+):
+    # Prevent admin from deleting themselves
+    if user_id == current_user["id"]:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot delete your own account."
+        )
+
+    # Check user exists
+    user = await users_col().find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Delete user
+    await users_col().delete_one({"_id": ObjectId(user_id)})
+
+    # Revoke all their refresh tokens
+    await refresh_tokens_col().delete_many({"user_id": user_id})
+
+    return {
+        "success": True,
+        "message": f"{user['name']} has been permanently removed from the system."
+    }
