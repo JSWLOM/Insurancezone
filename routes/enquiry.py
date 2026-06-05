@@ -65,7 +65,7 @@ async def list_enquiries(
     async for doc in cursor:
         doc["id"] = str(doc.pop("_id"))
         if isinstance(doc.get("timestamp"), datetime):
-            doc["timestamp"] = doc["timestamp"].isoformat()
+            doc["timestamp"] = doc["timestamp"].isoformat() + 'Z'
         results.append(doc)
 
     total = await enquiries_col().count_documents(query)

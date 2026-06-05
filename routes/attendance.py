@@ -79,7 +79,7 @@ async def punch_in(
 
     return {
         "success": True,
-        "punch_in": now.isoformat(),
+        "punch_in": now.isoformat()+ 'Z',
         "is_late": is_late,
         "distance_from_office_m": distance_m,
         "geo_verified": True,
@@ -141,7 +141,7 @@ async def punch_out(
 
     final_record = {**record, **updates}
     final_record["punch_in"] = punch_in_time.isoformat()
-    final_record["punch_out"] = now.isoformat()
+    final_record["punch_out"] = now.isoformat() + 'Z',
     await sync_attendance(final_record)
 
     return {
@@ -246,4 +246,4 @@ async def get_geofence(current_user: dict = Depends(require_auth)):
 def _format_datetimes(doc: dict):
     for key in ("punch_in", "punch_out"):
         if isinstance(doc.get(key), datetime):
-            doc[key] = doc[key].isoformat()
+            doc[key] = doc[key].isoformat() + 'Z'

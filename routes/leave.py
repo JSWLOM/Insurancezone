@@ -121,7 +121,7 @@ async def action_leave(
         await _mark_attendance_on_leave(leave)
 
     final = {**leave, **updates}
-    final["applied_at"] = leave["applied_at"].isoformat() if isinstance(leave.get("applied_at"), datetime) else ""
+    final["applied_at"] = leave["applied_at"].isoformat() + 'Z' if isinstance(leave.get("applied_at"), datetime) else ""
     await sync_leave(final)
 
     return {
@@ -262,4 +262,4 @@ def _count_working_days(start: date, end: date) -> int:
 def _fmt(doc: dict):
     for key in ("applied_at", "actioned_at"):
         if isinstance(doc.get(key), datetime):
-            doc[key] = doc[key].isoformat()
+            doc[key] = doc[key].isoformat() + 'Z'
