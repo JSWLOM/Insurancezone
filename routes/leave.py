@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from bson import ObjectId
+
+# India Standard Time — so "today" is always IST, not Render server time (Singapore UTC+8)
+IST = timezone(timedelta(hours=5, minutes=30))
 
 from database import leaves_col, leave_balances_col, users_col, attendance_col
 from models.leave import LeaveApplyRequest, LeaveActionRequest, LEAVE_ENTITLEMENTS
@@ -26,7 +29,7 @@ async def apply_leave(
     if start > end:
         raise HTTPException(status_code=400, detail="start_date must be before end_date")
 
-    if start < date.today():
+    if start < datetime.now(IST).date():
         raise HTTPException(status_code=400, detail="Cannot apply leave for past dates")
 
     total_days = _count_working_days(start, end)

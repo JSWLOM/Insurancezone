@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from bson import ObjectId
+
+# India Standard Time offset — used so date.today() is always IST, not server local time
+IST = timezone(timedelta(hours=5, minutes=30))
 
 from database import attendance_col, users_col
 from models.attendance import PunchInRequest, PunchOutRequest
@@ -21,7 +24,7 @@ async def punch_in(
     current_user: dict = Depends(require_auth),
 ):
     employee_id = current_user["id"]
-    today = date.today().isoformat()
+    today = datetime.now(IST).date().isoformat()   # IST date, not server local
     now = datetime.utcnow()
 
     existing = await attendance_col().find_one(
@@ -98,7 +101,7 @@ async def punch_out(
     current_user: dict = Depends(require_auth),
 ):
     employee_id = current_user["id"]
-    today = date.today().isoformat()
+    today = datetime.now(IST).date().isoformat()   # IST date, not server local
     now = datetime.utcnow()
 
     record = await attendance_col().find_one(
@@ -140,13 +143,13 @@ async def punch_out(
     )
 
     final_record = {**record, **updates}
-    final_record["punch_in"] = punch_in_time.isoformat()
-    final_record["punch_out"] = now.isoformat() + 'Z',
+    final_record["punch_in"] = punch_in_time.isoformat() + 'Z'
+    final_record["punch_out"] = now.isoformat() + 'Z'
     await sync_attendance(final_record)
 
     return {
         "success": True,
-        "punch_out": now.isoformat(),
+        "punch_out": now.isoformat() + 'Z',
         "working_hours": working_hours,
         "early_departure": early_departure,
         "distance_from_office_m": distance_m,
@@ -160,7 +163,7 @@ async def punch_out(
 
 @router.get("/today")
 async def today_attendance(current_user: dict = Depends(admin_or_manager)):
-    today = date.today().isoformat()
+    today = datetime.now(IST).date().isoformat()   # IST date
     records = []
     async for doc in attendance_col().find({"date": today}):
         doc["id"] = str(doc.pop("_id"))

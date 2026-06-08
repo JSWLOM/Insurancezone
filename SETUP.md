@@ -205,6 +205,17 @@ Full interactive docs: `/docs` (Swagger UI)
 
 
 
-izonejai@gmail.com     jai@9044
-izonesristi@gmail.com   Santosh@8858
-jaiswalom435@gmail.com    Izone@123
+izonejai@gmail.com   Staff   jai@9044
+Jaiswalsristi007@gmail.com  Manager  8808409192
+jaiswalom435@gmail.com   Superadmin  Izone@123
+
+
+shree ram, united, magma general insurance, 
+.\venv\Scripts\Activate.ps1
+
+
+
+
+
+
+
