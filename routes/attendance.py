@@ -14,7 +14,7 @@ from utils.auth_deps import require_auth, admin_or_manager
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 
 LATE_THRESHOLD_HOUR = 9
-LATE_THRESHOLD_MIN = 15
+LATE_THRESHOLD_MIN = 30
 SHORT_DAY_HOURS = 6.0
 
 

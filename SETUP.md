@@ -210,7 +210,7 @@ Jaiswalsristi007@gmail.com  Manager  8808409192
 jaiswalom435@gmail.com   Superadmin  Izone@123
 
 
-shree ram, united, magma general insurance, 
+
 .\venv\Scripts\Activate.ps1
 
 
