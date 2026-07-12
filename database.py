@@ -76,7 +76,7 @@ async def create_indexes():
 
         # Holidays — unique on date so same date can't be declared twice  ← NEW
         await holidays_col().create_index("date", unique=True)
-        await holidays_col().create_index("date")   # fast regex prefix queries
+        await holidays_col().create_index("date", unique=True)   # matches existing Atlas index
 
         logger.info("MongoDB indexes verified ✓")
     except Exception as e:
