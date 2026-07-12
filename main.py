@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 
 from config import get_settings
 from database import create_indexes, close_connection
-from routes import auth, enquiry, attendance, leave, metrics
+from routes import auth, enquiry, attendance, leave, metrics, holidays
 
 settings = get_settings()
 
@@ -65,6 +65,7 @@ app.include_router(enquiry.router)
 app.include_router(attendance.router)
 app.include_router(leave.router)
 app.include_router(metrics.router)
+app.include_router(holidays.router)
 
 # ── Health check ──────────────────────────────────────────────
 

@@ -5,7 +5,6 @@ import logging
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Single client instance reused across requests
 _client: AsyncIOMotorClient | None = None
 
 
@@ -20,7 +19,8 @@ def get_db():
     return get_client()[settings.db_name]
 
 
-# Collections — typed accessors
+# ── Collection accessors ──────────────────────────────────────
+
 def users_col():
     return get_db()["users"]
 
@@ -39,31 +39,29 @@ def leaves_col():
 def leave_balances_col():
     return get_db()["leave_balances"]
 
+def holidays_col():                      # ← NEW
+    return get_db()["holidays"]
+
+
+# ── Index setup (runs once on startup) ───────────────────────
 
 async def create_indexes():
-    """
-    Run once on startup to ensure all performance-critical indexes exist.
-    Idempotent — safe to call multiple times.
-    """
     try:
         # Users
         await users_col().create_index("email", unique=True)
         await users_col().create_index("role")
 
-        # Refresh tokens
+        # Refresh tokens — TTL index auto-removes expired tokens after 8 days
         await refresh_tokens_col().create_index("token", unique=True)
         await refresh_tokens_col().create_index("user_id")
-        # Auto-expire stale tokens from MongoDB after 8 days
-        await refresh_tokens_col().create_index(
-            "expires_at", expireAfterSeconds=0
-        )
+        await refresh_tokens_col().create_index("expires_at", expireAfterSeconds=0)
 
         # Enquiries
         await enquiries_col().create_index("timestamp")
         await enquiries_col().create_index("status")
         await enquiries_col().create_index("phone")
 
-        # Attendance — compound index so lookups by employee+date are fast
+        # Attendance — compound index for fast employee+date lookups
         await attendance_col().create_index([("employee_id", 1), ("date", -1)])
         await attendance_col().create_index("date")
 
@@ -75,6 +73,10 @@ async def create_indexes():
         await leave_balances_col().create_index(
             [("employee_id", 1), ("year", 1)], unique=True
         )
+
+        # Holidays — unique on date so same date can't be declared twice  ← NEW
+        await holidays_col().create_index("date", unique=True)
+        await holidays_col().create_index("date")   # fast regex prefix queries
 
         logger.info("MongoDB indexes verified ✓")
     except Exception as e:
