@@ -4,12 +4,10 @@ from datetime import datetime
 from bson import ObjectId
 
 
-# Roles available in the system
 RoleType = Literal["admin", "manager", "agent", "viewer"]
 
 
 class PyObjectId(str):
-    """Helper so Pydantic can handle MongoDB ObjectIds."""
     @classmethod
     def __get_validators__(cls):
         yield cls.validate
@@ -22,6 +20,7 @@ class PyObjectId(str):
 
 
 # ── DB Document ────────────────────────────────────────────────
+
 class UserInDB(BaseModel):
     id: Optional[PyObjectId] = Field(default=None, alias="_id")
     name: str
@@ -31,24 +30,26 @@ class UserInDB(BaseModel):
     department: str = ""
     phone: str = ""
     is_active: bool = True
+    office_id: Optional[str] = None          # ← ObjectId string of assigned office
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    created_by: Optional[str] = None   # admin user id who created this account
+    created_by: Optional[str] = None
 
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
 
 
-# ── API Request / Response models ─────────────────────────────
+# ── API models ─────────────────────────────────────────────────
 
 class UserCreate(BaseModel):
     """Admin uses this to create a new staff account."""
-    name: str = Field(..., min_length=2, max_length=80)
+    name: str       = Field(..., min_length=2, max_length=80)
     email: EmailStr
-    password: str = Field(..., min_length=8)
+    password: str   = Field(..., min_length=8)
     role: RoleType
     department: str = ""
-    phone: str = ""
+    phone: str      = ""
+    office_id: Optional[str] = None          # ← assign office at creation time
 
 
 class UserOut(BaseModel):
@@ -61,18 +62,21 @@ class UserOut(BaseModel):
     phone: str
     is_active: bool
     created_at: datetime
+    office_id: Optional[str]   = None        # ← included so frontend can filter/display
+    office_name: Optional[str] = None        # ← populated by list_users (join); None elsewhere
 
 
 class UserUpdate(BaseModel):
     """Admin can patch any of these fields."""
-    name: Optional[str] = None
-    role: Optional[RoleType] = None
+    name: Optional[str]       = None
+    role: Optional[RoleType]  = None
     department: Optional[str] = None
-    phone: Optional[str] = None
+    phone: Optional[str]      = None
     is_active: Optional[bool] = None
+    office_id: Optional[str]  = None         # ← allows reassigning office via PATCH /users/{id}
 
 
-# ── Auth request/response models ──────────────────────────────
+# ── Auth request / response models ────────────────────────────
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -86,6 +90,7 @@ class TokenResponse(BaseModel):
     role: RoleType
     name: str
     user_id: str
+    office_id: Optional[str] = None          # ← returned on login so frontend caches it
 
 
 class RefreshRequest(BaseModel):

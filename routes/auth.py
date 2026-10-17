@@ -2,14 +2,14 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from datetime import datetime
 from bson import ObjectId
 
-from database import users_col, refresh_tokens_col
+from database import users_col, refresh_tokens_col, offices_col
 from models.user import (
     UserCreate, UserOut, UserUpdate,
     LoginRequest, TokenResponse, RefreshRequest, AccessTokenResponse,
 )
 from utils.jwt_handler import (
     hash_password, verify_password,
-    create_access_token, decode_access_token,
+    create_access_token,
     generate_refresh_token, refresh_token_expiry,
 )
 from utils.auth_deps import require_auth, admin_only
@@ -17,16 +17,13 @@ from utils.auth_deps import require_auth, admin_only
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-# ── Register (admin-only) ─────────────────────────────────────
+# ── Register (admin only) ─────────────────────────────────────
 
 @router.post("/register", response_model=UserOut, status_code=201)
 async def register(
     body: UserCreate,
     current_user: dict = Depends(admin_only),
 ):
-    """
-    Create a new staff account.  Only admins can do this.
-    """
     existing = await users_col().find_one({"email": body.email})
     if existing:
         raise HTTPException(
@@ -34,19 +31,29 @@ async def register(
             detail=f"Email {body.email} is already registered",
         )
 
+    # Validate office_id if provided
+    if body.office_id:
+        office = await offices_col().find_one({"_id": ObjectId(body.office_id)})
+        if not office:
+            raise HTTPException(status_code=400, detail="office_id does not match any existing office")
+
     doc = {
-        "name": body.name,
-        "email": body.email,
+        "name":            body.name,
+        "email":           body.email,
         "hashed_password": hash_password(body.password),
-        "role": body.role,
-        "department": body.department,
-        "phone": body.phone,
-        "is_active": True,
-        "created_at": datetime.utcnow(),
-        "created_by": current_user["id"],
+        "role":            body.role,
+        "department":      body.department,
+        "phone":           body.phone,
+        "is_active":       True,
+        "office_id":       body.office_id or None,    # ← store office assignment
+        "created_at":      datetime.utcnow(),
+        "created_by":      current_user["id"],
     }
     result = await users_col().insert_one(doc)
     doc["id"] = str(result.inserted_id)
+
+    # Attach office_name for the response
+    doc["office_name"] = office["name"] if body.office_id else None
     return _format_user(doc)
 
 
@@ -76,11 +83,10 @@ async def login(body: LoginRequest):
         name=user["name"],
     )
 
-    # Generate opaque refresh token and store in DB
     refresh_token = generate_refresh_token()
     await refresh_tokens_col().insert_one({
-        "token": refresh_token,
-        "user_id": user_id,
+        "token":      refresh_token,
+        "user_id":    user_id,
         "expires_at": refresh_token_expiry(),
         "created_at": datetime.utcnow(),
     })
@@ -91,6 +97,7 @@ async def login(body: LoginRequest):
         role=user["role"],
         name=user["name"],
         user_id=user_id,
+        office_id=user.get("office_id"),              # ← included in login response
     )
 
 
@@ -98,10 +105,6 @@ async def login(body: LoginRequest):
 
 @router.post("/refresh", response_model=AccessTokenResponse)
 async def refresh_access_token(body: RefreshRequest):
-    """
-    Exchange a valid refresh token for a new short-lived access token.
-    The refresh token itself is NOT rotated here (keep it simple for small team).
-    """
     stored = await refresh_tokens_col().find_one({"token": body.refresh_token})
     if not stored:
         raise HTTPException(
@@ -109,13 +112,11 @@ async def refresh_access_token(body: RefreshRequest):
             detail="Invalid or expired refresh token. Please log in again.",
         )
 
-    # Check expiry manually (TTL index removes it from DB eventually,
-    # but let's be explicit)
     if datetime.utcnow() > stored["expires_at"]:
         await refresh_tokens_col().delete_one({"token": body.refresh_token})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token has expired. Please log in again.",
+            detail="Refresh token expired. Please log in again.",
         )
 
     user = await users_col().find_one({"_id": ObjectId(stored["user_id"])})
@@ -138,29 +139,48 @@ async def refresh_access_token(body: RefreshRequest):
 
 @router.post("/logout", status_code=204)
 async def logout(body: RefreshRequest):
-    """Revoke the refresh token — client should also discard the access token."""
     await refresh_tokens_col().delete_one({"token": body.refresh_token})
-    # Always return 204 regardless — don't leak whether token existed
 
 
 # ── Current user ──────────────────────────────────────────────
 
 @router.get("/me", response_model=UserOut)
 async def get_me(current_user: dict = Depends(require_auth)):
+    # Optionally enrich with office_name
+    if current_user.get("office_id"):
+        office = await offices_col().find_one({"_id": ObjectId(current_user["office_id"])})
+        current_user["office_name"] = office["name"] if office else None
     return _format_user(current_user)
 
 
-# ── List all staff (admin/manager) ────────────────────────────
+# ── List all staff (admin / manager) ─────────────────────────
 
 @router.get("/users")
 async def list_users(current_user: dict = Depends(require_auth)):
     if current_user["role"] not in ("admin", "manager"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    cursor = users_col().find({}, {"hashed_password": 0})
-    users = []
-    async for u in cursor:
-        users.append(_format_user(u))
-    return users
+
+    # Collect all users first
+    user_list = []
+    async for u in users_col().find({}, {"hashed_password": 0}):
+        user_list.append(u)
+
+    # Batch-fetch office names in one query (avoid N+1)
+    office_ids = list({u["office_id"] for u in user_list if u.get("office_id")})
+    office_map: dict[str, str] = {}
+    if office_ids:
+        async for o in offices_col().find(
+            {"_id": {"$in": [ObjectId(oid) for oid in office_ids]}}
+        ):
+            office_map[str(o["_id"])] = o["name"]
+
+    # Attach office_name to each user dict before formatting
+    result = []
+    for u in user_list:
+        u["office_name"] = office_map.get(u.get("office_id") or "", None)
+        result.append(_format_user(u))
+
+    return result
 
 
 # ── Update user (admin only) ──────────────────────────────────
@@ -175,6 +195,12 @@ async def update_user(
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 
+    # If reassigning office, validate it exists
+    if "office_id" in updates and updates["office_id"]:
+        office = await offices_col().find_one({"_id": ObjectId(updates["office_id"])})
+        if not office:
+            raise HTTPException(status_code=400, detail="office_id does not match any existing office")
+
     result = await users_col().find_one_and_update(
         {"_id": ObjectId(user_id)},
         {"$set": updates},
@@ -182,7 +208,36 @@ async def update_user(
     )
     if not result:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Attach office_name
+    if result.get("office_id"):
+        office = await offices_col().find_one({"_id": ObjectId(result["office_id"])})
+        result["office_name"] = office["name"] if office else None
+
     return _format_user(result)
+
+
+# ── Delete user (admin only) ──────────────────────────────────
+
+@router.delete("/users/{user_id}", status_code=200)
+async def delete_user(
+    user_id: str,
+    current_user: dict = Depends(admin_only),
+):
+    if user_id == current_user["id"]:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+
+    user = await users_col().find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await users_col().delete_one({"_id": ObjectId(user_id)})
+    await refresh_tokens_col().delete_many({"user_id": user_id})
+
+    return {
+        "success": True,
+        "message": f"{user['name']} has been permanently removed.",
+    }
 
 
 # ── Helper ────────────────────────────────────────────────────
@@ -197,32 +252,6 @@ def _format_user(u: dict) -> UserOut:
         phone=u.get("phone", ""),
         is_active=u.get("is_active", True),
         created_at=u.get("created_at", datetime.utcnow()),
+        office_id=u.get("office_id"),
+        office_name=u.get("office_name"),              # only populated by list_users / get_me
     )
-
-@router.delete("/users/{user_id}", status_code=200)
-async def delete_user(
-    user_id: str,
-    current_user: dict = Depends(admin_only),
-):
-    # Prevent admin from deleting themselves
-    if user_id == current_user["id"]:
-        raise HTTPException(
-            status_code=400,
-            detail="You cannot delete your own account."
-        )
-
-    # Check user exists
-    user = await users_col().find_one({"_id": ObjectId(user_id)})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Delete user
-    await users_col().delete_one({"_id": ObjectId(user_id)})
-
-    # Revoke all their refresh tokens
-    await refresh_tokens_col().delete_many({"user_id": user_id})
-
-    return {
-        "success": True,
-        "message": f"{user['name']} has been permanently removed from the system."
-    }

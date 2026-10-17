@@ -12,6 +12,14 @@ Tech stack:
   - Haversine geo-fence for GPS attendance
 """
 
+"""
+Insurance Zone API v2.0
+=======================
+Added in v2.0: Multi-office support (routes/offices.py)
+Each employee is assigned to one office. Punch-in/out validates
+against that employee's specific office geo-fence, not a global .env value.
+"""
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,35 +27,26 @@ from fastapi.responses import JSONResponse
 
 from config import get_settings
 from database import create_indexes, close_connection
-from routes import auth, enquiry, attendance, leave, metrics, holidays
+from routes import auth, enquiry, attendance, leave, metrics, holidays, offices   # ← offices added
 
 settings = get_settings()
 
 
-# ── Lifespan (startup / shutdown) ─────────────────────────────
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     await create_indexes()
     yield
-    # Shutdown
     await close_connection()
 
 
-# ── App ───────────────────────────────────────────────────────
-
 app = FastAPI(
     title="Insurance Zone API",
-    description="Backend for Insurance Zone — auth, leads, attendance, leaves",
-    version="1.0.0",
+    description="Backend for Insurance Zone — auth, leads, attendance, leaves, multi-office",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
 )
-
-
-# ── CORS ──────────────────────────────────────────────────────
 
 app.add_middleware(
     CORSMiddleware,
@@ -57,31 +56,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# ── Routes ────────────────────────────────────────────────────
-
 app.include_router(auth.router)
 app.include_router(enquiry.router)
 app.include_router(attendance.router)
 app.include_router(leave.router)
 app.include_router(metrics.router)
 app.include_router(holidays.router)
+app.include_router(offices.router)       # ← NEW
 
-# ── Health check ──────────────────────────────────────────────
 
 @app.get("/health", tags=["system"])
 async def health():
     return {
-        "status": "ok",
+        "status":  "ok",
         "service": "Insurance Zone API",
-        "env": settings.app_env,
+        "version": "2.0.0",
+        "env":     settings.app_env,
     }
 
 
 @app.get("/", tags=["system"])
 async def root():
     return JSONResponse({
-        "message": "Insurance Zone API is running.",
-        "docs": "/docs",
-        "health": "/health",
+        "message": "Insurance Zone API v2.0 is running.",
+        "docs":    "/docs",
+        "health":  "/health",
     })
