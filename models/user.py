@@ -74,6 +74,7 @@ class UserUpdate(BaseModel):
     phone: Optional[str]      = None
     is_active: Optional[bool] = None
     office_id: Optional[str]  = None         # ← allows reassigning office via PATCH /users/{id}
+    password:  Optional[str]      = Field(default=None, min_length=8)  # ← NEW
 
 
 # ── Auth request / response models ────────────────────────────

@@ -195,6 +195,10 @@ async def update_user(
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 
+    # ── Password reset: hash before storing, never save plaintext ──
+    if "password" in updates:
+        updates["hashed_password"] = hash_password(updates.pop("password"))
+
     # If reassigning office, validate it exists
     if "office_id" in updates and updates["office_id"]:
         office = await offices_col().find_one({"_id": ObjectId(updates["office_id"])})
